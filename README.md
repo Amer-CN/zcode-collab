@@ -1,51 +1,153 @@
-# zcode-collab
+<p align="center"><img src="https://capsule-render.vercel.app/api?type=waving&color=0:1F4E79,100:0D2137&height=170&section=header&text=zcode-collab&fontSize=64&fontColor=ffffff&animation=fadeIn" width="100%"></p>
 
-ZCode 多模型子智能体协作模式：顶级模型编排 → 便宜模型执行 → 跨厂商模型独立审查。
+<div align="center">
 
-> **模型完全自主**：本框架不绑定任何模型。安装时 AI 自动填一个可用的，之后你爱换哪个换哪个。唯一的经验建议：审查者别和执行者用同一个模型（自审等于没审）。
+#### ZCode 多模型子智能体协作模式：主模型编排 → executor 执行 → 跨厂商独立审查
 
-## 这是什么
+**三句话装好 · AI 全自动部署 · 模型随你换 · 内化双钢人决策**
 
-一套在 ZCode 里落地的多智能体分工：你描述需求 → 主模型出方案、写任务简报 → **executor** 按简报干活 → **code-reviewer**（另一家厂商的模型）独立验收 → 主模型裁决。附 researcher 调研、vision-reader 识图、advisor 三人圆桌、双钢人决策前置。
+[![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&size=20&pause=1200&color=1F4E79&center=true&vCenter=true&width=620&lines=%E4%B8%89%E5%8F%A5%E8%AF%9D%E8%A3%85%E5%8D%8F%E4%BD%9C%E6%A8%A1%E5%BC%8F%EF%BC%8C%E6%8B%8E%E5%8C%85%E5%85%A5%E4%BD%8F;%E6%89%A7%E8%A1%8C%E5%AE%A1%E6%9F%A5%E5%88%86%E5%AE%B6%EF%BC%8C%E7%9B%B2%E5%8C%BA%E4%B8%8D%E9%87%8D%E5%90%88;%E6%A8%A1%E5%9E%8B%E9%9A%8F%E4%BD%A0%E6%8D%A2%EF%BC%8C%E5%AE%A1%E6%9F%A5%E4%B8%8D%E5%AE%A1%E8%87%AA%E5%B7%B1%E4%BA%BA)](https://git.io/typing-svg)
 
-核心价值两条：**独立验证**（干活的不验收，验收的和干活的不是一家）+ **省 token**（执行环节交给便宜模型）。
+[![Version](https://img.shields.io/badge/Version-v1.0.0-1F4E79?style=for-the-badge)](#-版本历史)
+[![Subagents](https://img.shields.io/badge/子智能体-7个-3B82F6?style=for-the-badge)](#-能力矩阵)
+[![License](https://img.shields.io/badge/License-MIT-10B981?style=for-the-badge)](./zcode-collab/LICENSE)
+[![AgentSkills](https://img.shields.io/badge/AgentSkills-Standard-8B5CF6?style=for-the-badge)](https://agentskills.io)
 
-## 安装（拎包入住）
+</div>
 
-1. 下载本仓库（或 `git clone https://github.com/Amer-CN/zcode-collab.git`），把 `zcode-collab/` 目录放到 `~/.agents/skills/`（或 `~/.zcode/skills/`）下。
-2. 对你的 ZCode 说：**「用 zcode-collab Skill，把多模型协作模式给我装上。」**
-3. 重启 ZCode（或新开会话），生效。
+---
 
-AI 会自动：备份老配置 → 读你本机可用模型 → 统一填入 → 写规则文件和 agent 文件 → 读回校验。全程不需要你碰设置、不需要理解原理。
+你有顶级模型的订阅，但不想让最贵的模型干最费 token 的活？**zcode-collab
+把多智能体分工装进 ZCode**：你描述需求，主模型出方案、写简报，便宜的模型
+（executor）照简报施工，另一家厂商的模型（code-reviewer）独立验收，主模型
+裁决。附调研员、识图员、三人圆桌顾问和双钢人决策前置——一个 Skill 全带上。
 
-查版本：`zcode-collab/VERSION`。升级：拉新版覆盖本目录即可。
+遵循 [Agent Skills](https://agentskills.io) 开放标准。**模型完全自主**：安装时
+AI 只会填一个"确认可用"的模型，之后每个岗位用什么、什么时候换，全是你自己的事。
 
-## 日常用法
+## 🍼 小白三分钟上手（第一次接触 Agent Skill？从这里开始）
 
-- 粘贴现成方案 → 自动执行 + 汇报（审查交给给你方案的 AI）
-- 大白话描述需求 → 自动走完整四步
-- 纯讨论、小改动 → 直接做
-- 说「圆桌」「大家怎么看」→ 三家顾问同时出意见
-- 决策类问题（该不该做 / 选哪个）→ 自动走双钢人简版结论
-- 跑偏了 → 说「回滚到基线提交」；小事别啰嗦 → 说「直接做」
+**你不需要会编程。** 只需要一样东西：一个支持 Agent Skills 的 AI 工具
+（ZCode、Claude Code、Codex 等 40+ 都行）。
 
-## 目录结构
+**第一步：装。** 把这句话原样发给你的 AI 工具：
+
+> 帮我安装这个 skill：https://github.com/Amer-CN/zcode-collab
+
+**第二步：等 AI 干完。** 它会自动：备份老配置 → 读你本机有哪些模型 →
+统一填一个能用的 → 写规则文件和 7 个子智能体 → 读回校验 → 告诉你怎么换模型。
+
+**第三步：重启生效。** 重启 ZCode（或新开会话），说人话就能用：
+
+> 帮我看看这个项目的 README 写了什么
+
+就完了。不需要懂原理，不需要碰设置界面，不需要选模型。
+
+## ✨ 能力矩阵
+
+| 能力 | 说明 | 对应文件 |
+|------|------|----------|
+| 🧭 **模式判断** | A 外部方案 / B 完整四步 / C 直接答疑 / D 小改直做，自动分类 | zcode-collab/references/global-agents.md |
+| 📋 **简报制度** | 基线哈希 + 允许/禁止文件 + 可验证验收标准，跑砸随时回滚 | 同上 |
+| 🔨 **executor** | 施工队：照简报干活，禁顺手镀金，不做设计不审查 | zcode-collab/references/agent-executor.md |
+| 🔍 **code-reviewer** | 监理：只认仓库实际改动，只判"够不够"，驳回须证据 | zcode-collab/references/agent-code-reviewer.md |
+| 📚 **researcher** | 只读调研：本地代码库 + 互联网 + GitHub（有 MCP 就带） | zcode-collab/references/agent-researcher.md |
+| 👁️ **vision-reader** | 识图员：主模型不支持看图时给它当眼睛（可选） | zcode-collab/references/agent-vision-reader.md |
+| 🗣️ **advisor ×3** | 圆桌顾问：三家不同厂商同时出意见，主模型综合 | zcode-collab/references/agent-advisor.md |
+| ⚖️ **双钢人决策** | "该不该做/选哪个"先走简版论证（crux + 反转条件 + 承诺窗口，≤300 字） | zcode-collab/SKILL.md + references/decision-full.md |
+
+## 🚀 它怎么工作
+
+```
+你说需求 ── 主模型判断 A/B/C/D 模式
+   │
+   ├─ B 完整流程：出方案（3 行白话）→ 写简报（基线+范围+验收）
+   │              → executor 施工 → code-reviewer 查仓库实际改动
+   │              → 主模型裁决（驳回最多 2 轮）
+   ├─ A 现成方案：跳过规划，执行完提交推送，审查交给给你方案的 AI
+   ├─ C/D 讨论、小改：主模型直接做
+   └─ 决策类问题：双钢人简版（≤300 字：crux/反转条件/承诺窗口）
+```
+
+**命脉只有一条**：干活的模型不参与验收，验收的模型和它不同厂商——
+盲区不重合，错误互相抓住。其余所有搭配都随你。
+
+## 📦 安装方式
+
+### 方式一：Agent Skills 环境（ZCode / Claude Code / Codex）
+
+```bash
+git clone https://github.com/Amer-CN/zcode-collab.git
+# 复制到你的技能目录：
+cp -r zcode-collab/ ~/.agents/skills/zcode-collab/
+# 或 Claude Code: ~/.claude/skills/
+```
+
+然后对你的 AI 说：**「用 zcode-collab Skill，把多模型协作模式给我装上。」**
+装完重启 ZCode（或新开会话）即生效。
+
+### 方式二：任意 LLM 作为系统知识
+
+把 `zcode-collab/SKILL.md` + `references/global-agents.md` 全文塞进 system
+prompt，agent 提示词按需取用。
+
+## 🗂️ 仓库结构
+
+<details>
+<summary><b>目录树</b>（点击展开）</summary>
 
 ```
 zcode-collab/
-├── SKILL.md                  # Skill 主体：部署流程 + 日常答疑 + 双钢人决策流程
-├── VERSION                   # 版本号（当前 1.0.0）
-├── LICENSE                   # MIT
+├── SKILL.md                      # Skill 主体：AI 自助安装 6 步 + 日常答疑 + 双钢人决策
+├── VERSION                       # 版本号（当前 1.0.0）
+├── LICENSE                       # MIT
 └── references/
-    ├── global-agents.md      # 全局协作规则全文
-    ├── agent-executor.md     # 施工队提示词
-    ├── agent-code-reviewer.md# 监理提示词（只读）
-    ├── agent-researcher.md   # 调研员提示词
-    ├── agent-vision-reader.md# 识图员提示词
-    ├── agent-advisor.md      # 圆桌三席共用模板
-    └── decision-full.md      # 决策完整版 12 段模板
+    ├── global-agents.md          # 全局协作规则全文（A/B/C/D 模式判断+四步流程+汇报纪律）
+    ├── agent-executor.md         # executor 提示词 + frontmatter 模板
+    ├── agent-code-reviewer.md    # code-reviewer 提示词 + frontmatter 模板
+    ├── agent-researcher.md       # researcher 提示词 + frontmatter 模板
+    ├── agent-vision-reader.md    # vision-reader 提示词 + frontmatter 模板
+    ├── agent-advisor.md          # 圆桌三席共用提示词模板
+    └── decision-full.md          # 双钢人完整版 12 段模板（重大决策才用）
 ```
 
-## 来源与许可
+</details>
 
-源自 3 周实战迭代的个人配置（2026-08 部署，经 22 文件重构与多起真实事故验证）。MIT License。决策方法参考开源项目 dual-steelman-decision（MIT）。
+## ⚙️ 模型怎么配（你说了算）
+
+安装时 AI 只做一件事：从你本机**确认可用**的模型里选一个，7 个岗位统一填上。
+之后怎么分，是你的自由——只有两条经验建议（不是规矩）：
+
+| 建议 | 原因 |
+|------|------|
+| 审查者别和执行者用同一个模型 | 同一份权重自审，盲区 100% 重合，等于没审 |
+| 圆桌三家（advisor-A/B/C）分属不同厂商 | 配成同一家，圆桌变复读机 |
+
+除此之外：想让审查用旗舰、执行用便宜货——随你；想全用最贵的——也随你。
+换模型就是设置界面里点一下下拉框，新会话生效。
+
+## 📜 版本历史
+
+<details>
+<summary><b>当前 v1.0.0</b>（2026-09-06）· 后续版本在此追加</summary>
+
+| 版本 | 内容 |
+|------|------|
+| v1.0.0（2026-09-06） | 首版：A/B/C/D 模式判断 + 简报制度 + 7 子智能体（executor/code-reviewer/researcher/vision-reader/advisor×3）+ 双钢人决策内化 + AI 自助安装流程（备份→探测模型→统一填入→读回校验，含字节账校验与备份恢复路径） |
+
+</details>
+
+## 🙏 许可与致谢
+
+- 双钢人决策方法参考开源项目 [dual-steelman-decision](https://github.com/Kujojolyne1992/dual-steelman-decision-skill)（MIT）
+- 本仓库代码与配置 MIT License，各文件许可以 [LICENSE](./zcode-collab/LICENSE) 为准
+
+<div align="center">
+
+---
+
+Made by [@Amer-CN](https://github.com/Amer-CN)
+
+*配置来自 3 周真实项目实战迭代。仅供参考，按你自己的工作流调整。*
+
+</div>
