@@ -77,13 +77,31 @@ license: MIT
 
 等式成立 = 用户既有内容原样保留且新段完整；不等 = 出了问题，用备份恢复后重来。全新创建（原文件不存在）时，才适用"全文与 references 一致"的校验。
 
+### 第 4.5 步：安装钩子（满血版协作模式需要这一步）
+
+四个钩子脚本在 `hooks/` 下（enforce-flow.ps1、post-tool-audit.ps1、stop-enforce.ps1、session-start-enforce.ps1）。Windows 机器照做，其他系统跳过本步（钩子是 PowerShell 脚本）：
+
+1. 四个文件复制到 `~/.zcode/cli/hooks/`。
+2. **合并**（不是覆盖）`~/.zcode/cli/config.json` 的 hooks 配置：读出现有 `hooks.events`，把四个事件追加进去——
+   - `PreToolUse`（matcher `Edit|Write|MultiEdit|ApplyPatch|NotebookEdit`，调 enforce-flow.ps1，timeoutMs 10000）
+   - `Stop`（调 stop-enforce.ps1，timeoutMs 5000）
+   - `SessionStart`（matcher `startup|resume`，调 session-start-enforce.ps1，timeoutMs 5000）
+   - `PostToolUse`（调 post-tool-audit.ps1，timeoutMs 10000）
+   
+   ⚠️ config.json 里可能有密钥（mcp.headers 等），**只改 `hooks` 键，其他键一个字节都不许动**。改前先备份 config.json。
+3. PowerShell 语法校验四个脚本（ParseFile 零错误），模拟 stdin 跑一遍 post-tool-audit 确认能写出审计日志。
+
 ### 第 6 步：告知用户
 
 向用户报告：
-1. 装了什么、模型统一填了哪个；
+1. 装了什么、模型统一填了哪个、钩子装了几个；
 2. **必须重启 ZCode（或新开会话）才会生效**——子智能体在会话启动时发现，旧会话直接用是看不到的；
 3. 模型是统一默认，随时可在设置界面逐个更换（换法见下方"模型自主权"）；
 4. 给三条使用示范：「帮我看看这个项目」／粘贴一段方案／说"圆桌"。
+
+### 版本检查（每次协作任务开工前顺手执行）
+
+跑 `python scripts/version_check.py`（以 Skill 目录为 cwd）。输出 `behind` 时提醒用户一句"发现新版（本地 X → 远端 Y），要不要同步"，用户说要才动手（git pull 或重下覆盖）；`current`/`unknown`（断网无 git）静默继续，**绝不阻塞任务**。
 
 ## 用途二：日常使用与答疑
 

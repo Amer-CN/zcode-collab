@@ -8,7 +8,7 @@
 
 [![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&size=20&pause=1200&color=1F4E79&center=true&vCenter=true&width=620&lines=%E4%B8%89%E5%8F%A5%E8%AF%9D%E8%A3%85%E5%8D%8F%E4%BD%9C%E6%A8%A1%E5%BC%8F%EF%BC%8C%E6%8B%8E%E5%8C%85%E5%85%A5%E4%BD%8F;%E6%89%A7%E8%A1%8C%E5%AE%A1%E6%9F%A5%E5%88%86%E5%AE%B6%EF%BC%8C%E7%9B%B2%E5%8C%BA%E4%B8%8D%E9%87%8D%E5%90%88;%E6%A8%A1%E5%9E%8B%E9%9A%8F%E4%BD%A0%E6%8D%A2%EF%BC%8C%E5%AE%A1%E6%9F%A5%E4%B8%8D%E5%AE%A1%E8%87%AA%E5%B7%B1%E4%BA%BA)](https://git.io/typing-svg)
 
-[![Version](https://img.shields.io/badge/Version-v1.0.0-1F4E79?style=for-the-badge)](#-版本历史)
+[![Version](https://img.shields.io/badge/Version-v1.1.0-1F4E79?style=for-the-badge)](#-版本历史)
 [![Subagents](https://img.shields.io/badge/子智能体-7个-3B82F6?style=for-the-badge)](#-能力矩阵)
 [![License](https://img.shields.io/badge/License-MIT-10B981?style=for-the-badge)](./zcode-collab/LICENSE)
 [![AgentSkills](https://img.shields.io/badge/AgentSkills-Standard-8B5CF6?style=for-the-badge)](https://agentskills.io)
@@ -99,7 +99,7 @@ prompt，agent 提示词按需取用。
 ```
 zcode-collab/
 ├── SKILL.md                      # Skill 主体：AI 自助安装 6 步 + 日常答疑 + 双钢人决策
-├── VERSION                       # 版本号（当前 1.0.0）
+├── VERSION                       # 版本号（当前 1.1.0）
 ├── LICENSE                       # MIT
 └── references/
     ├── global-agents.md          # 全局协作规则全文（A/B/C/D 模式判断+四步流程+汇报纪律）
@@ -129,11 +129,12 @@ zcode-collab/
 ## 📜 版本历史
 
 <details>
-<summary><b>当前 v1.0.0</b>（2026-09-06）· 后续版本在此追加</summary>
+<summary><b>当前 v1.1.0</b>（2026-09-09）· v1.0.0 → v1.1.0 完整明细点击展开</summary>
 
 | 版本 | 内容 |
 |------|------|
 | v1.0.0（2026-09-06） | 首版：A/B/C/D 模式判断 + 简报制度 + 7 子智能体（executor/code-reviewer/researcher/vision-reader/advisor×3）+ 双钢人决策内化 + AI 自助安装流程（备份→探测模型→统一填入→读回校验，含字节账校验与备份恢复路径） |
+| v1.1.0（2026-09-09） | 满血版：hooks/ 四钩子进包（enforce-flow/PostToolUse/stop-enforce/SessionStart，含安装合并指引）+ scripts/version_check.py 主动版本检查（super-official-writer 同口径：永不阻塞/只读/behind 提示）+ references 同步简报路径参数化与漂移守卫规则 + Agent Skills 触发描述补强 |
 
 </details>
 
