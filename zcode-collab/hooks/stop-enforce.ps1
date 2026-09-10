@@ -149,14 +149,17 @@ try {
         if ($rec.tool -ne 'Edit' -and $rec.tool -ne 'Write') { continue }
 
         # Non-production paths excluded from the count:
-        #   .work/  .git/         task docs, briefings, commit-message temp files, locks
-        #   %USERPROFILE%\.zcode\tmp\   one-off diagnostic scripts
+        #   .work/  .git/   task docs, briefings, commit-message temp files, locks
+        #   ~/.zcode/       the collaboration system's own config tree (rules, agents,
+        #                   hooks, hook-state, tmp) - same exemption enforce-flow applies.
+        #                   NOTE: this means edits to the governance tooling itself are
+        #                   NOT machine-gated; they rely on briefing + review discipline.
         #   system TEMP and common build/vendor dirs
         # Paths may arrive with either separator - normalise before comparing.
         $tn = ($t.ToLowerInvariant() -replace '/', '\')
         if ($t -match '(?i)(\.work|\.git)[\\/]') { continue }
-        $nzTmp = ($homeDir + '\.zcode\tmp\').ToLowerInvariant() -replace '/', '\'
-        if ($tn.StartsWith($nzTmp)) { continue }
+        $zcodeRoot = ($homeDir + '\.zcode\').ToLowerInvariant() -replace '/', '\'
+        if ($tn.StartsWith($zcodeRoot)) { continue }
         $sysTmp = [System.IO.Path]::GetTempPath()
         if ($sysTmp) {
             $st = ($sysTmp.ToLowerInvariant() -replace '/', '\')
