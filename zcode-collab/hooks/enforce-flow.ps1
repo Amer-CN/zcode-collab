@@ -1,5 +1,9 @@
-# enforce-flow.ps1 - flow-enforcement hook for ZCode
-# Blocks the 3rd file modification in a window where no task briefing was written.
+# enforce-flow.ps1 - flow-enforcement hook for ZCode (PreToolUse)
+# Blocks a code edit when it would push this session past 3 UNDECLARED production
+# files. "Declared" = the file's name appears in a task briefing under the project's
+# .work/ (current-task.md OR any task-*.md - the parallel-session naming AGENTS.md
+# prescribes). Same coverage semantics as stop-enforce.ps1 (one authoritative rule).
+#
 # Invoked by ZCode as a process-type hook:
 #   powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <this file>
 # Input : PreToolUse event JSON on stdin (tool_name / tool_input.file_path / session_id / cwd)
@@ -8,17 +12,21 @@
 # Output: exit 0 = allow (stdout kept empty - hook stdout is parsed as strict JSON)
 #         exit 2 = block (message written to stderr)
 # State : C:\Users\Admin\.zcode\cli\hook-state\state-<sha256(project|session)>.json
-#         fields: files (deduped list of counted absolute paths), briefWritten (bool, starts false)
+#         fields: seen (deduped list of production paths touched this session).
+#         Coverage is recomputed on every call, so adding a file to a briefing
+#         un-blocks it immediately (self-healing; no permanent per-session pass).
 
 $ErrorActionPreference = 'Stop'
 
-# Block message (verbatim, UTF-8; stored base64 so the file is encoding-independent)
-$BLOCK_MSG = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('5bey6L+e57ut5pS55YqoIDMg5Liq5paH5Lu25LiU5pys5qyh5pyq5YaZ5Lu75Yqh566A5oql44CC5oyJ5Y2P5L2c5rWB56iL5bqU5YWI5YaZIC53b3JrL2N1cnJlbnQtdGFzay5tZCDlho3osIPnlKggZXhlY3V0b3LjgILoi6Xnoa7orqTopoHot7Pov4fmtYHnqIvvvIzor7fnlLHnlKjmiLfmmI7noa7mjIfnpLrjgII='))
-
 function Exit-Pass { exit 0 }
 
-function Exit-Block {
-    try { [Console]::Error.WriteLine($BLOCK_MSG) } catch { try { $host.UI.WriteErrorLine($BLOCK_MSG) } catch {} }
+function Exit-Block([string]$reason) {
+    try {
+        $b = [System.Text.Encoding]::UTF8.GetBytes($reason)
+        [Console]::OpenStandardError().Write($b, 0, $b.Length)
+    } catch {
+        try { [Console]::Error.WriteLine($reason) } catch { }
+    }
     exit 2
 }
 
@@ -30,6 +38,35 @@ function Get-StatePath([string]$proj, [string]$sid, [string]$usrHome) {
     $hb = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($k))
     $hex = -join ($hb | ForEach-Object { $_.ToString('x2') })
     return (Join-Path $dir ("state-" + $hex + ".json"))
+}
+
+# ---- briefing discovery: nearest .work/ up the tree holding current-task.md or task-*.md ----
+function Get-BriefFiles([string]$proj) {
+    $probe = $proj
+    while ($true) {
+        $wd = Join-Path $probe '.work'
+        if (Test-Path $wd) {
+            $c = @(Get-ChildItem -Path $wd -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'current-task.md' -or $_.Name -like 'task-*.md' })
+            if ($c.Count -gt 0) { return $c }
+        }
+        $parent = Split-Path $probe -Parent
+        if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $probe) { return @() }
+        $probe = $parent
+    }
+}
+
+# ---- coverage: does any briefing mention this file (by file name)? ----
+function Test-Declared([string]$file, $briefs) {
+    if ($null -eq $briefs -or $briefs.Count -eq 0) { return $false }
+    $leaf = Split-Path $file -Leaf
+    if ([string]::IsNullOrWhiteSpace($leaf)) { return $false }
+    foreach ($b in $briefs) {
+        try {
+            $txt = Get-Content $b.FullName -Raw -Encoding UTF8
+            if ($txt -match [regex]::Escape($leaf)) { return $true }
+        } catch { }
+    }
+    return $false
 }
 
 # ---- read stdin JSON ----
@@ -74,24 +111,17 @@ if (-not $homeDir) { $homeDir = [System.Environment]::GetFolderPath('UserProfile
 $zcodeRoot = [System.IO.Path]::GetFullPath((Join-Path $homeDir '.zcode'))
 if ($target.StartsWith($zcodeRoot, [System.StringComparison]::OrdinalIgnoreCase)) { Exit-Pass }
 
+# ---- never-count paths: anything under .work\ or .work/ (briefings, reports) ----
+if ($target -match '(?i)\.work[\\/]') { Exit-Pass }
+
+# ---- never-count paths: .git/ internals (commit-message temp files, locks) ----
+if ($target -match '(?i)\.git[\\/]') { Exit-Pass }
+
 # ---- state file path (same key for the whole event) ----
 $statePath = Get-StatePath $projectDir $sessionId $homeDir
 
-# ---- writing the briefing: reset the counting window ----
-# Criterion is "was a briefing written in THIS counting window", never "does the file exist".
-# Path-matched by regex: immune to slash direction / case / relative-vs-absolute / wrong $projectDir.
-if ($target -match '(?i)[\\/]?\.work[\\/]current-task\.md$') {
-    $st = @{ files = @(); briefWritten = $true } | ConvertTo-Json -Compress -Depth 5
-    Set-Content -Path $statePath -Value $st -Encoding UTF8
-    Exit-Pass
-}
-
-# ---- never-count paths: anything under .work\ or .work/ ----
-if ($target -match '(?i)\.work[\\/]') { Exit-Pass }
-
 # ---- load state; 2h expiry only when no session id (stale resets) ----
-$files = @()
-$briefWritten = $false
+$seen = @()
 if (Test-Path $statePath) {
     try {
         $last = (Get-Item $statePath).LastWriteTimeUtc
@@ -101,22 +131,37 @@ if (Test-Path $statePath) {
         }
         if (-not $stale) {
             $st = Get-Content $statePath -Encoding UTF8 -Raw | ConvertFrom-Json
-            $files = @($st.files)
-            $briefWritten = [bool]$st.briefWritten
+            if ($st.PSObject.Properties.Name -contains 'seen') { $seen = @($st.seen) }
+            elseif ($st.PSObject.Properties.Name -contains 'files') { $seen = @($st.files) }
         }
-    } catch { $files = @(); $briefWritten = $false }
+    } catch { $seen = @() }
 }
 
-# ---- normal file: append (dedup) then decide ----
+# ---- normal file: append (dedup), persist, then decide ----
 $dup = $false
-foreach ($f in $files) {
+foreach ($f in $seen) {
     if ([string]::Equals($f, $target, [System.StringComparison]::OrdinalIgnoreCase)) { $dup = $true; break }
 }
-if (-not $dup) { $files += $target }
+if (-not $dup) { $seen += $target }
 
-$st = @{ files = $files; briefWritten = $briefWritten } | ConvertTo-Json -Compress -Depth 5
+$st = @{ seen = $seen } | ConvertTo-Json -Compress -Depth 5
 Set-Content -Path $statePath -Value $st -Encoding UTF8
 
-if ($files.Count -ge 3 -and -not $briefWritten) { Exit-Block }
+# ---- decision: count files NOT declared in any briefing; 3+ -> block ----
+$briefs = Get-BriefFiles $projectDir
+
+if (Test-Declared $target $briefs) { Exit-Pass }
+
+$undeclared = @()
+foreach ($f in $seen) {
+    if (-not (Test-Declared $f $briefs)) { $undeclared += (Split-Path $f -Leaf) }
+}
+
+if ($undeclared.Count -ge 3) {
+    $show = @($undeclared | Select-Object -First 8)
+    $list = $show -join ', '
+    if ($undeclared.Count -gt 8) { $list += ' (+' + ($undeclared.Count - 8) + ' more)' }
+    Exit-Block ("FLOW_GATE: this session has touched " + $undeclared.Count + " production files that no task briefing declares. Undeclared: " + $list + " . Per AGENTS.md, cumulative edits >= 3 files must go through the B-class flow: write .work/task-<keyword>.md (own file per parallel session) listing the files you touch, dispatch executor with that exact path, then code-reviewer. Add these names to a briefing to proceed.")
+}
 
 Exit-Pass
