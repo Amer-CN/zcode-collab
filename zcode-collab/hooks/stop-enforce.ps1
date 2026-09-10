@@ -59,23 +59,32 @@ if ($obj.PSObject.Properties.Name -contains 'sessionId' -and $obj.sessionId) {
 }
 
 # ---- CHECK 1: briefing file presence ----
-# Resolve the project root by walking up from cwd to the nearest dir containing
-# .work/current-task.md (cwd may be a subdirectory the session cd'ed into).
-$briefPath = $null
+# Resolve the project root by walking up from cwd to the nearest dir containing a
+# .work/ folder with at least one briefing file (cwd may be a subdirectory the
+# session cd'ed into). A "briefing file" is current-task.md OR task-*.md - the
+# parallel-session naming the block message itself recommends.
+$briefDir = $null
 $probe = $cwd
 try { $probe = [System.IO.Path]::GetFullPath($probe) } catch { $probe = $cwd }
 while ($true) {
-    $cand = Join-Path $probe '.work\current-task.md'
-    if (Test-Path $cand) { $briefPath = $cand; break }
+    $wd = Join-Path $probe '.work'
+    if (Test-Path $wd) {
+        $any = @(Get-ChildItem -Path $wd -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'current-task.md' -or $_.Name -like 'task-*.md' })
+        if ($any.Count -gt 0) { $briefDir = $wd; break }
+    }
     $parent = Split-Path $probe -Parent
     if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $probe) { break }
     $probe = $parent
 }
-if ($null -eq $briefPath) {
-    # No briefing anywhere up the tree: fall back to cwd-level path for messaging
-    $briefPath = Join-Path $cwd '.work\current-task.md'
+
+# All briefing files that could cover this session's edits
+$briefFiles = @()
+if ($null -ne $briefDir) {
+    $briefFiles = @(Get-ChildItem -Path $briefDir -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'current-task.md' -or $_.Name -like 'task-*.md' })
 }
-$hasBrief = Test-Path $briefPath
+$hasBrief = ($briefFiles.Count -gt 0)
+$briefPath = $null
+if ($hasBrief) { $briefPath = $briefFiles[0].FullName } else { $briefPath = Join-Path $cwd '.work\current-task.md' }
 
 # ---- detect write operations in this turn's messages ----
 $hadWrite = $false
@@ -131,8 +140,9 @@ try {
         if ($rec.ok -ne $true) { continue }
         $t = [string]$rec.target
         if ([string]::IsNullOrWhiteSpace($t)) { continue }
-        # .work/ docs (briefings, reports) don't count toward the drift threshold
-        if ($t -match '(?i)\.work[\\/]') { continue }
+        # .work/ docs (briefings, reports) and .git/ internals (commit-message
+        # temp files, locks) are not production files - exclude from the count.
+        if ($t -match '(?i)(\.work|\.git)[\\/]') { continue }
         $edited[$t.ToLowerInvariant()] = $true
     }
 } catch { Exit-Pass }
@@ -140,17 +150,23 @@ try {
 if ($edited.Count -ge 3) {
     # Was executor dispatched in this session? Executor's own audit trail lives in
     # the subagent session log, not here; check via recent Agent tool records instead.
-    # Cheap heuristic: if a .work/task-*.md briefing exists for this project AND the
-    # current-task.md allows-list covers these files, assume flow is being followed.
-    # Otherwise block with a routing instruction.
+    # Cheap heuristic: if any briefing file in this project's .work/ (current-task.md
+    # OR task-*.md, the parallel-session naming) covers every edited file, assume the
+    # flow is being followed. Otherwise block with a routing instruction.
     $allowedCover = $false
+    $covered = 0
     if ($hasBrief) {
         try {
-            $briefText = Get-Content $briefPath -Raw -Encoding UTF8
+            # A file counts as covered if it appears in ANY briefing file (union),
+            # so a session that ran two sequential tasks with two task-*.md briefs
+            # is recognised correctly.
             $covered = 0
             foreach ($f in $edited.Keys) {
                 $leaf = Split-Path $f -Leaf
-                if ($briefText -match [regex]::Escape($leaf)) { $covered++ }
+                foreach ($bf in $briefFiles) {
+                    $briefText = Get-Content $bf.FullName -Raw -Encoding UTF8
+                    if ($briefText -match [regex]::Escape($leaf)) { $covered++; break }
+                }
             }
             if ($covered -ge $edited.Count) { $allowedCover = $true }
         } catch { $allowedCover = $false }
@@ -158,7 +174,7 @@ if ($edited.Count -ge 3) {
     if (-not $allowedCover) {
         $req = "FLOW_DRIFT: This session edited " + $edited.Count + " distinct production files without executor dispatch (machine count from audit log). Per AGENTS.md, cumulative edits >= 3 files must go through the B-class flow: write .work/task-<keyword>.md (own file per parallel session), dispatch executor with that exact path, then code-reviewer. Create the briefing now."
         try {
-            $dbg = "ts=" + (Get-Date).ToUniversalTime().ToString('o') + " sid=" + $sid + " safe=" + $sessionIdSafe + " audit=" + $auditFile + " edited=" + $edited.Count + " covered=" + $covered + " brief=" + $briefPath
+            $dbg = "ts=" + (Get-Date).ToUniversalTime().ToString('o') + " sid=" + $sid + " safe=" + $sessionIdSafe + " audit=" + $auditFile + " edited=" + $edited.Count + " covered=" + $covered + " briefs=" + $briefFiles.Count + " brief=" + $briefPath
             $db = [System.Text.Encoding]::UTF8.GetBytes($dbg + "`n")
             $df = Join-Path $homeDir '.zcode\cli\hooks\stop-debug.log'
             $fs = [System.IO.File]::Open($df, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write, [System.IO.FileShare]::ReadWrite)
