@@ -130,51 +130,82 @@ $auditFile = Join-Path $homeDir ('.zcode\cli\hooks\activity-' + $sessionIdSafe +
 if (-not (Test-Path $auditFile)) { Exit-Pass }
 
 $edited = @{}
+$delegatedTo = @{}
 try {
     foreach ($line in [System.IO.File]::ReadLines($auditFile)) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
         $rec = $null
         try { $rec = $line | ConvertFrom-Json } catch { continue }
         if ($null -eq $rec) { continue }
-        if ($rec.tool -ne 'Edit' -and $rec.tool -ne 'Write') { continue }
         if ($rec.ok -ne $true) { continue }
         $t = [string]$rec.target
         if ([string]::IsNullOrWhiteSpace($t)) { continue }
-        # .work/ docs (briefings, reports) and .git/ internals (commit-message
-        # temp files, locks) are not production files - exclude from the count.
+
+        # Real delegation signal: which subagents were actually dispatched this session.
+        if ($rec.tool -eq 'Agent' -or $rec.tool -eq 'Task') {
+            $delegatedTo[$t.ToLowerInvariant()] = $true
+            continue
+        }
+        if ($rec.tool -ne 'Edit' -and $rec.tool -ne 'Write') { continue }
+
+        # Non-production paths excluded from the count:
+        #   .work/  .git/         task docs, briefings, commit-message temp files, locks
+        #   %USERPROFILE%\.zcode\tmp\   one-off diagnostic scripts
+        #   system TEMP and common build/vendor dirs
+        # Paths may arrive with either separator - normalise before comparing.
+        $tn = ($t.ToLowerInvariant() -replace '/', '\')
         if ($t -match '(?i)(\.work|\.git)[\\/]') { continue }
+        $nzTmp = ($homeDir + '\.zcode\tmp\').ToLowerInvariant() -replace '/', '\'
+        if ($tn.StartsWith($nzTmp)) { continue }
+        $sysTmp = [System.IO.Path]::GetTempPath()
+        if ($sysTmp) {
+            $st = ($sysTmp.ToLowerInvariant() -replace '/', '\')
+            if ($tn.StartsWith($st)) { continue }
+        }
+        if ($tn -match '[\\/](node_modules|__pycache__|\.venv|venv|dist|build|target|\.next|\.cache)[\\/]') { continue }
+
         $edited[$t.ToLowerInvariant()] = $true
     }
 } catch { Exit-Pass }
 
 if ($edited.Count -ge 3) {
-    # Was executor dispatched in this session? Executor's own audit trail lives in
-    # the subagent session log, not here; check via recent Agent tool records instead.
-    # Cheap heuristic: if any briefing file in this project's .work/ (current-task.md
-    # OR task-*.md, the parallel-session naming) covers every edited file, assume the
-    # flow is being followed. Otherwise block with a routing instruction.
+    # Two independent ways to satisfy the guard:
+    #   1. REAL DELEGATION - executor (or code-reviewer) was actually dispatched this
+    #      session; recorded by post-tool-audit.ps1 as target=subagent_type on Agent calls.
+    #   2. DECLARATION - a briefing file in this project's .work/ (current-task.md or
+    #      task-*.md, the parallel-session naming) covers every edited file (union).
+    # Otherwise block, naming exactly which files are undeclared.
+    $delegated = $delegatedTo.ContainsKey('executor') -or $delegatedTo.ContainsKey('code-reviewer')
     $allowedCover = $false
     $covered = 0
+    $missing = @()
     if ($hasBrief) {
         try {
-            # A file counts as covered if it appears in ANY briefing file (union),
-            # so a session that ran two sequential tasks with two task-*.md briefs
-            # is recognised correctly.
             $covered = 0
             foreach ($f in $edited.Keys) {
                 $leaf = Split-Path $f -Leaf
+                $hit = $false
                 foreach ($bf in $briefFiles) {
                     $briefText = Get-Content $bf.FullName -Raw -Encoding UTF8
-                    if ($briefText -match [regex]::Escape($leaf)) { $covered++; break }
+                    if ($briefText -match [regex]::Escape($leaf)) { $hit = $true; break }
                 }
+                if ($hit) { $covered++ } else { $missing += $leaf }
             }
             if ($covered -ge $edited.Count) { $allowedCover = $true }
         } catch { $allowedCover = $false }
+    } else {
+        foreach ($f in $edited.Keys) { $missing += (Split-Path $f -Leaf) }
     }
-    if (-not $allowedCover) {
-        $req = "FLOW_DRIFT: This session edited " + $edited.Count + " distinct production files without executor dispatch (machine count from audit log). Per AGENTS.md, cumulative edits >= 3 files must go through the B-class flow: write .work/task-<keyword>.md (own file per parallel session), dispatch executor with that exact path, then code-reviewer. Create the briefing now."
+    if (-not $delegated -and -not $allowedCover) {
+        $missList = ''
+        if ($missing.Count -gt 0) {
+            $show = @($missing | Select-Object -First 8)
+            $missList = ' Undeclared: ' + ($show -join ', ')
+            if ($missing.Count -gt 8) { $missList += ' (+' + ($missing.Count - 8) + ' more)' }
+        }
+        $req = "FLOW_DRIFT: This session edited " + $edited.Count + " distinct production files without executor dispatch (machine count from audit log)." + $missList + " Per AGENTS.md, cumulative edits >= 3 files must go through the B-class flow: write .work/task-<keyword>.md (own file per parallel session) listing every file you touch, dispatch executor with that exact path, then code-reviewer. Or add the undeclared files to a briefing if they were already authorized."
         try {
-            $dbg = "ts=" + (Get-Date).ToUniversalTime().ToString('o') + " sid=" + $sid + " safe=" + $sessionIdSafe + " audit=" + $auditFile + " edited=" + $edited.Count + " covered=" + $covered + " briefs=" + $briefFiles.Count + " brief=" + $briefPath
+            $dbg = "ts=" + (Get-Date).ToUniversalTime().ToString('o') + " sid=" + $sid + " edited=" + $edited.Count + " covered=" + $covered + " delegated=" + $delegated + " briefs=" + $briefFiles.Count + " missing=" + ($missing -join '|')
             $db = [System.Text.Encoding]::UTF8.GetBytes($dbg + "`n")
             $df = Join-Path $homeDir '.zcode\cli\hooks\stop-debug.log'
             $fs = [System.IO.File]::Open($df, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write, [System.IO.FileShare]::ReadWrite)

@@ -60,6 +60,12 @@ if ($null -ne $ti) {
         if ([string]::IsNullOrWhiteSpace("$target")) { $target = Get-Field $ti 'input' }
         $target = [string]$target
         if ($target.Length -gt 200) { $target = $target.Substring(0, 200) + '...' }
+    } elseif ($toolName -eq 'Agent' -or $toolName -eq 'Task') {
+        # Record WHICH subagent was dispatched (executor / code-reviewer / ...), so
+        # downstream checks can tell real delegation from a briefing-only declaration.
+        $target = Get-Field $ti 'subagent_type'
+        if ([string]::IsNullOrWhiteSpace("$target")) { $target = '(unknown)' }
+        $target = [string]$target
     } else {
         $target = Get-Field $ti 'file_path'
         if ([string]::IsNullOrWhiteSpace("$target")) { $target = Get-Field $ti 'path' }
