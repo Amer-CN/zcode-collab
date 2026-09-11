@@ -17,9 +17,15 @@ function Exit-Pass([string]$context = '') {
     exit 0
 }
 
-# ---- read stdin ----
+# ---- read stdin as RAW BYTES, decode UTF-8 ----
+# [Console]::In.ReadToEnd() decodes with the console codepage (GBK on zh-CN Windows)
+# while ZCode pipes UTF-8 -> non-ASCII payload paths get mangled. Read raw bytes.
 $raw = $null
-try { $raw = [Console]::In.ReadToEnd() } catch { $raw = $null }
+try {
+    $ms = New-Object System.IO.MemoryStream
+    [Console]::OpenStandardInput().CopyTo($ms)
+    $raw = [System.Text.Encoding]::UTF8.GetString($ms.ToArray())
+} catch { $raw = $null }
 if ([string]::IsNullOrWhiteSpace($raw)) { Exit-Pass }
 
 # ---- parse mode ----

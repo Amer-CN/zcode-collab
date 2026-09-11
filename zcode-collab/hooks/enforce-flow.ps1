@@ -86,7 +86,16 @@ function Test-Declared([string]$file, $briefs) {
 
 # ---- read stdin JSON ----
 $json = $null
-try { $raw = [Console]::In.ReadToEnd() } catch { $raw = $null }
+# ---- read stdin as RAW BYTES, decode UTF-8 ----
+# [Console]::In.ReadToEnd() decodes with the console codepage (GBK on zh-CN Windows)
+# while ZCode pipes UTF-8 -> non-ASCII paths (Chinese dir names) get mangled, which
+# breaks both the brief search and the state key. Read raw bytes instead.
+$raw = $null
+try {
+    $ms = New-Object System.IO.MemoryStream
+    [Console]::OpenStandardInput().CopyTo($ms)
+    $raw = [System.Text.Encoding]::UTF8.GetString($ms.ToArray())
+} catch { $raw = $null }
 
 if (-not [string]::IsNullOrWhiteSpace($raw)) { try { $json = $raw | ConvertFrom-Json } catch { $json = $null } }
 
