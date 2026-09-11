@@ -184,11 +184,16 @@ A/B 能走原生 scope，但「工具到底注册没有 / 实际生效什么路�
 
 ```
 content/collab-rules.md   ─┐
-content/roles/*.md        ─┴─ node build.mjs ─┬─ lib/generated-content.js （提示段正文）
-                                              └─ cordis.patch.yml          （五个角色行的 persona）
+content/roles/*.md        ─┴─ node build.mjs ─┬─ lib/generated-content.js （提示段正文 + 五角色的 persona/deny 名单）
+                                              └─ cordis.patch.yml          （只插入 collab-mode 一行）
 ```
 
 改完 `content/` 必须重新运行 `node build.mjs`（等价 `npm run build`，`prepack` 里也挂了）。两份产物都是生成物，**不要手改** —— 下一次构建会覆盖，并让 ZCode 侧的同步失去意义。
+
+⚠ 五个角色行**不在** `cordis.patch.yml` 里（v0.2.0 起由插件用 `ctx.loader.create()` 拥有，
+原因见上文「角色路由怎么真正下发」）。因此 `dsh --profile web --dump-config` 只能看到
+`collab-mode` 一行 —— 角色行的存在性要看自检区（C 区块）或
+`GET /api/collab-mode/selfcheck` 的 `roles[].entryPresent / active`。
 
 ## 已知边界
 
