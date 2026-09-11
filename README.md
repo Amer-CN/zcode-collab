@@ -2,14 +2,15 @@
 
 DeepSeek Harness 插件：把 ZCode 侧那套「协作模式」搬到 DSH 上。
 
-它注册四类东西：
+它注册五类东西：
 
 | # | 内容 | 实现落点 |
 |---|---|---|
-| 1 | 五个角色子智能体工具 | bundle patch 里五行 `@deepseek-ai/dsh-tool-subagent` |
+| 1 | 五个角色子智能体工具 | 插件用 `ctx.loader.create()` 自己拥有的五行 `@deepseek-ai/dsh-tool-subagent` |
 | 2 | 协作纪律系统提示段 | `ctx.systemPrompt.section` |
 | 3 | 改动前拦截 + 工具调用审计 | `tools/pre-execute` / `tools/post-execute` |
 | 4 | 轮次结束告警 | `agent/turn-stopping` |
+| 5 | 设置面板（v0.2.0） | settings 命名空间 `collab-mode` + 客户端卡片 `settings.plugin.item` |
 
 钩子走 DSH 的**代码级事件**，不依赖 `@deepseek-ai/dsh-hooks-claude-code` 适配器，也不复用 ZCode 的 PowerShell 脚本。
 
@@ -23,11 +24,55 @@ dsh plugin --profile web add link:F:/AIXM/dsh-collab-mode
 
 `dsh plugin` 转发给 pnpm 之后会把包名补进 profile 的 `dsh.profile.bundles`。**重启 `dsh web` 生效**（bundle 层在进程启动时合成；已挂载的旧进程看不到新 bundle）。
 
+⚠ **改本插件的模块代码也需要重启**：cordis 的 HMR 只监听补丁文件（`cordis-plugin-hmr` 的 `root: []` 不监听模块文件），loader 又复用已解析包的 ESM 模块缓存 —— 实测改 `main` / `exports` / 换 entry id 都无法在运行中的进程里换掉已加载的模块。改 `content/` 之类只影响生成物的改动同样要重启才生效。
+
 卸载：
 
 ```powershell
 dsh plugin --profile web remove dsh-collab-mode
 ```
+
+## 设置面板（v0.2.0）
+
+「设置 → 插件 → 插件配置」里的**协作模式**卡片，排在 Free Search 之后，四个区块：
+
+| 区块 | 内容 | 落点 |
+|---|---|---|
+| A 角色路由 | 五行 × 供应商 / 模型 / 推理强度 / maxTokens，**留空 = 继承当前会话模型** | settings 命名空间 `collab-mode` |
+| B 纪律开关 | `gate` / `audit` / `warnOnTurnEnd` + 未声明文件阈值 + 审计目录 | 同上；`cordis.patch.yml` 里的值降级为默认值 |
+| C 自检 | 插件版本、提示段字符数、五个角色工具**是否已注册**、各自**实际生效路由**、审计目录、最近一条审计记录、刷新与探测按钮 | 宿主只读路由 `GET /api/collab-mode/selfcheck` |
+| D 角色定义 | 每行的 loader 行 id / 是否运行 / toolFilter 条数 / persona 字符数（只读） | 同一自检路由 |
+
+A/B 的读写走**原生 client settings scope**（`ctx.settingsScope.bind`），不经过自建 HTTP bridge；`unset` 用于「留空」，因此清空字段是退回组合层默认值，而不是写一个空串进用户层。
+
+### 角色路由怎么真正下发（机制 1：Loader 改写）
+
+面板保存 → settings 值变化 → 插件把每行角色的 `agentOptions` 热写进对应 loader entry 的
+`config` → `loader.update(id, { config })` 重启那一行 → `dsh-tool-subagent` 用新路由重建工具。
+**不落盘、不动 `cordis.patch.yml`**，因此不需要重述五个角色约 10KB 的 persona。
+
+⚠ **为什么五个角色行由插件 `ctx.loader.create()` 拥有，而不是 `cordis.patch.yml` 的 `insert`：**
+
+`EntryTree.update()`（也就是 `loader.update`）结尾会无条件调 `source.tree.write()`
+（`cordis-plugin-loader/src/config/tree.ts`）。而 `tree` 是谁取决于 entry 挂在哪个 group：
+
+- **补丁 `insert` 出来的行**落在文件后端 `Include`（`dsh-app-boot` 的 EntryTree 子类，
+  `.yml` 在它的 `writable` 映射里）的 root group 上 → `entry.parent.tree === Include`
+  → `Include.write()` → `writeFile(this.root.data)` → **把整棵合成树回写进
+  `~/.dsh/profiles/web/cordis.yml`**，压平 bundle / profile / home 三层补丁。
+- **插件 `ctx.loader.create()` 创建的行**落在 `Loader` 自己的 root group 上
+  → `entry.parent.tree === Loader` → `Loader.write()` 是**空实现**（同文件 `write() {}`）
+  → 不落盘。
+
+离线夹具（`.work/verify-plugin.mjs`）断言插件全程不调用 `loader.write()`；交付前后也比对过
+`~/.dsh/profiles/web/cordis.yml` 的内容哈希与 mtime。
+
+### 自检路由为什么存在
+
+A/B 能走原生 scope，但「工具到底注册没有 / 实际生效什么路由 / 最近一条审计是什么」是**运行时事实**，
+不在 settings 值里，所以 C 区块由宿主侧一条只读路由提供（`ctx.webServer.register`，`kind: 'exact'`）。
+卡片在命名空间未被服务、自检路由不可用、条目缺失时都给出可读原因，不白屏。
+
 
 ## 1. 五个角色工具
 
