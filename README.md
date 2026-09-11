@@ -73,6 +73,21 @@ A/B 能走原生 scope，但「工具到底注册没有 / 实际生效什么路�
 不在 settings 值里，所以 C 区块由宿主侧一条只读路由提供（`ctx.webServer.register`，`kind: 'exact'`）。
 卡片在命名空间未被服务、自检路由不可用、条目缺失时都给出可读原因，不白屏。
 
+⚠ **这条路由必须自己走信任栅栏**（v0.2.0 修复）：
+
+`webServer.match()` 是「**exact 表优先**，未命中再比 prefix」（`dsh-host-webserver` 的 `match()`），
+而 composition 的信任栅栏（Host/Origin 检查 + 浏览器认证 cookie）挂在 `dsh-client-connection`
+的 `/api` **prefix** 路由上。自检路由是 `/api/...` 下的 **exact** 路由，**优先级高于那道栅栏** ——
+不自己校验就会绕过认证，任何本机进程都能读到日志目录、审计目标这些运行时事实。
+
+因此 `apply` 注入 `connection`，在 handler 开头调 `connection.requestRejection(req)`
+（与官方 `@deepseek-ai/dsh-host-open-in-app` 同一做法），拒绝即返回 401/403；
+拿不到 connection 时该 fiber 等待、路由不注册（硬依赖），而不是放行。
+客户端侧对应地用 `credentials: 'same-origin'` 带上 cookie。
+
+实测证据：修复前命令行**不带 cookie** 请求该路由返回 **200**（而随便一个不存在的 `/api` 路径返回 401）；
+离线夹具对「401 拒绝 / 放行 200 / 非 GET 405 / 缺 connection 时不注册」四条都有断言。
+
 
 ## 1. 五个角色工具
 
