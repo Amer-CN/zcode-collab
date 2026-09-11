@@ -8,7 +8,7 @@
 
 [![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&size=20&pause=1200&color=1F4E79&center=true&vCenter=true&width=620&lines=%E4%B8%89%E5%8F%A5%E8%AF%9D%E8%A3%85%E5%8D%8F%E4%BD%9C%E6%A8%A1%E5%BC%8F%EF%BC%8C%E6%8B%8E%E5%8C%85%E5%85%A5%E4%BD%8F;%E6%89%A7%E8%A1%8C%E5%AE%A1%E6%9F%A5%E5%88%86%E5%AE%B6%EF%BC%8C%E7%9B%B2%E5%8C%BA%E4%B8%8D%E9%87%8D%E5%90%88;%E6%A8%A1%E5%9E%8B%E9%9A%8F%E4%BD%A0%E6%8D%A2%EF%BC%8C%E5%AE%A1%E6%9F%A5%E4%B8%8D%E5%AE%A1%E8%87%AA%E5%B7%B1%E4%BA%BA)](https://git.io/typing-svg)
 
-[![Version](https://img.shields.io/badge/Version-v1.1.4-1F4E79?style=for-the-badge)](#-版本历史)
+[![Version](https://img.shields.io/badge/Version-v1.1.5-1F4E79?style=for-the-badge)](#-版本历史)
 [![Subagents](https://img.shields.io/badge/子智能体-7个-3B82F6?style=for-the-badge)](#-能力矩阵)
 [![License](https://img.shields.io/badge/License-MIT-10B981?style=for-the-badge)](./zcode-collab/LICENSE)
 [![AgentSkills](https://img.shields.io/badge/AgentSkills-Standard-8B5CF6?style=for-the-badge)](https://agentskills.io)
@@ -99,7 +99,7 @@ prompt，agent 提示词按需取用。
 ```
 zcode-collab/
 ├── SKILL.md                      # Skill 主体：AI 自助安装 6 步 + 日常答疑 + 双钢人决策
-├── VERSION                       # 版本号（当前 1.1.4）
+├── VERSION                       # 版本号（当前 1.1.5）
 ├── LICENSE                       # MIT
 └── references/
     ├── global-agents.md          # 全局协作规则全文（A/B/C/D 模式判断+四步流程+汇报纪律）
@@ -129,7 +129,7 @@ zcode-collab/
 ## 📜 版本历史
 
 <details>
-<summary><b>当前 v1.1.4</b>（2026-09-10）· v1.0.0 → v1.1.4 完整明细点击展开</summary>
+<summary><b>当前 v1.1.5</b>（2026-09-11）· v1.0.0 → v1.1.5 完整明细点击展开</summary>
 
 | 版本 | 内容 |
 |------|------|
@@ -139,6 +139,7 @@ zcode-collab/
 | v1.1.2（2026-09-10） | 钩子三处设计修正（跨窗口实战反馈）：① 计数排除一次性诊断目录（~/.zcode/tmp、系统 TEMP、node_modules/__pycache__ 等构建目录）——`~/.zcode/tmp` 下的一次性脚本不再被误计为生产文件；② 拦截文案列出**未申报的具体文件名**（Undeclared: a.cs, b.cs …），不再只给一个数字；③ 引入**真实派发信号**——post-tool-audit 记录 Agent 调用的 subagent_type，stop-enforce 见到 executor/code-reviewer 实际派发即放行（不再仅靠简报声明）；路径分隔符正反斜杠均已兼容 |
 | v1.1.3（2026-09-10） | enforce-flow（PreToolUse）三处同族缺陷修复，口径与 stop-enforce 统一：① 简报识别扩为 current-task.md + 全部 task-*.md（原先只有 current-task.md 能重置，按 AGENTS.md 规定的 task-<关键词>.md 命名反而永远重置不了、第 3 个文件必拦，还会逼模型覆盖 canonical 简报槽位造成数据丢失）；② 计数排除 .git/（提交信息临时文件不再误计）；③ 门禁判定从「写过简报＝整会话永久豁免」改为**逐文件覆盖判定**——未申报文件累计 3 个即拦、拦时列名，把文件补进简报后立即放行（自愈），消除「一次重置＝永久放行」。24 项回归全过 |
 | v1.1.4（2026-09-10） | 计数范围同源：`~/.zcode` 配置树在 stop-enforce 中也豁免（与 enforce-flow 一致）——协作系统自身的规则/子智能体/钩子改动不再被误计为「项目生产文件」。**代价已注明**：治理工具自身的改动不设机器门禁，依靠简报与审查纪律。两钩子的排除清单至此完全一致 |
+| v1.1.5（2026-09-11） | enforce-flow「真实调用与手动运行结果不一致」修复：① **拦截文案附诊断串** `[cwd=… sid=… key=state-….json briefs=N]`（此前无法从外部反推钩子实际使用的 projectDir 与 state-key，排障只能靠猜）；② **字段拼写容错**——sessionId / session_id 两种拼写都接受（若真实载荷是 camelCase 而钩子只读 snake_case，同一载荷会落到不同 state-key，正是「真实=拦、手动=放」的成因）；cwd / project_dir / projectDir 同理，且缺 cwd 时回退到目标文件所在目录；③ **规范化统一**——路径统一 `GetFullPath`→反斜杠→去尾斜杠→小写，state-key 与简报查找共用同一函数；④ **双树简报查找**——被改文件可能在会话项目之外（如用户级插件目录），项目树与目标文件树两处都找简报（并集）。另：post-tool-audit 耗时字段容错（durationMs/duration_ms/duration/elapsedMs）。12 项回归全过 |
 
 </details>
 

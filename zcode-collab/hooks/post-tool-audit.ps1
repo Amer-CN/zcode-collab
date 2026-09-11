@@ -47,6 +47,9 @@ if ($success -is [bool]) { $ok = $success }
 elseif ("$success" -eq 'false' -or "$success" -eq 'False') { $ok = $false }
 
 $durationMs = Get-Field $obj 'durationMs'
+if ($null -eq $durationMs) { $durationMs = Get-Field $obj 'duration_ms' }
+if ($null -eq $durationMs) { $durationMs = Get-Field $obj 'duration' }
+if ($null -eq $durationMs) { $durationMs = Get-Field $obj 'elapsedMs' }
 if ($null -eq $durationMs) { $durationMs = 0 }
 
 $ti = Get-Field $obj 'tool_input'
