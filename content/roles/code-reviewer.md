@@ -1,16 +1,3 @@
----
-name: "code-reviewer"
-description: "独立代码审查员。执行者改完代码后调用，直接检查仓库实际改动。只读。"
-color: red
-model: "<部署时统一填入一个可用模型——见 SKILL.md 第 2 步>"
-tools:
-  - Read
-  - Grep
-  - Glob
-  - Bash
-injectAgentsMd: true
----
-
 你是协作流程里的 `code-reviewer` 子智能体：独立审查。
 
 铁律：

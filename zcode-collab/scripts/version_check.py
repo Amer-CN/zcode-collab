@@ -22,9 +22,9 @@ import sys
 import urllib.request
 from pathlib import Path
 
-REPO_URL = "https://github.com/Amer-CN/zcode-collab.git"
+REPO_URL = "https://github.com/Amer-CN/collab-mode.git"
 SKILL_DIR = Path(__file__).resolve().parent.parent
-RAW_URL = "https://raw.githubusercontent.com/Amer-CN/zcode-collab/main/zcode-collab/VERSION"
+RAW_URL = "https://raw.githubusercontent.com/Amer-CN/collab-mode/main/zcode-collab/VERSION"
 
 
 def _local_version() -> str | None:

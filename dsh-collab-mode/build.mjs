@@ -18,11 +18,23 @@
  * 把整棵合成树回写进 profile 的 `cordis.yml`；插件自己 create 的行挂在 Loader 的
  * root group 上，而 `Loader.write()` 是空实现，因此不会落盘。
  */
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, cpSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = dirname(fileURLToPath(import.meta.url))
+
+/* ---------- 第 0 步：从仓库根 content/ 构建时拷贝（合仓约定） ----------
+ * 唯一事实源在仓库根 `../content/`。Windows 上 git symlink 不稳，
+ * 所以每次构建先全量拷贝到本地 `content/` 再走原有生成逻辑。
+ * 本地 `content/` 是构建中间产物，已进 .gitignore，不提交。 */
+function syncContent() {
+  const src = join(root, '..', 'content')
+  const dst = join(root, 'content')
+  if (!existsSync(src)) throw new Error(`仓库根 content/ 不存在：${src}`)
+  rmSync(dst, { recursive: true, force: true })
+  cpSync(src, dst, { recursive: true })
+}
 
 /** 读一份内容文件，统一换行并保证结尾恰好一个换行。 */
 function readContent(rel) {
@@ -96,6 +108,7 @@ function readManifest() {
   return manifest
 }
 
+syncContent()
 const manifest = readManifest()
 
 /* ---------- 产物一：lib/generated-content.js ---------- */
