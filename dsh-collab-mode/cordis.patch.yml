@@ -1,0 +1,25 @@
+# dsh-collab-mode bundle patch —— 本文件由 build.mjs 生成，请勿手改。
+# 重新生成：node build.mjs
+#
+# 这一层挂在 Host 平面（profile root → dsh-base → dsh-web-app → 本 bundle →
+# profile 自己的 cordis.patch.yml → home 补丁 → --patch 覆盖层），因此协作模式对
+# 每个会话可见，不依赖会话选了哪个 agent preset。
+#
+# ⚠ 这里只插入插件自己一行。五个角色行（collab-executor / collab-code-reviewer /
+# collab-researcher / collab-advisor / collab-vision-reader）改由插件在运行时用
+# ctx.loader.create() 创建，因为设置面板要按角色热改它们的 agentOptions：
+#
+#   补丁 insert 出来的行挂在文件后端 Include 的 root group 上，
+#   对它调 loader.update 会走 EntryTree.update 结尾的 source.tree.write()
+#   → Include.write() → 把整棵**合成树**回写进 ~/.dsh/profiles/web/cordis.yml，
+#   压平 bundle / profile / home 三层补丁。
+#
+#   插件自己 create 的行挂在 Loader 自己的 root group 上，而 Loader.write() 是
+#   空实现（no-op），所以 loader.update 不落盘、只热重启那一行。
+#
+# 想覆盖插件自身的配置（钩子开关、阈值、日志目录）时，在更靠后的层按 id 覆盖即可；
+# 注意 DSH 的 patch 语义是「整行替换 config」，被覆盖的行要重述它拥有的每一个键。
+
+- insert:
+    - id: collab-mode
+      name: 'dsh-collab-mode'
