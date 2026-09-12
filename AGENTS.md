@@ -1,0 +1,181 @@
+# AGENTS.md —— 本仓库的维护说明
+
+> **给谁看**：接手本仓库的 AI 会话（新窗口没有上下文历史，先读这份）。
+> **给用户看的部分**：安装与使用见 [README.md](./README.md)，本文件只讲"怎么改、怎么验、怎么发"。
+
+## 0. 三十秒认识这个仓库
+
+**一个项目，两种 Agent 适配，共用一份内容。**
+
+| 目录 | 是什么 | 给谁 |
+|---|---|---|
+| `content/` | **唯一事实源**：协作纪律 + 五个角色提示词 + 平台差异清单 | 不直接安装，被两边消费 |
+| `zcode-collab/` | ZCode Skill（部署脚本 + 四个 PowerShell 钩子 + 双钢人决策） | ZCode、Claude Code、Codex 等 |
+| `dsh-collab-mode/` | DeepSeek Harness 插件（五角色工具 + 提示段 + 三个代码级钩子 + 设置面板） | DeepSeek Harness |
+
+**核心约定：改规则只改 `content/`，两边都是生成物。**
+
+```
+content/collab-rules.md  ─┬─→ dsh-collab-mode/lib/generated-content.js   (build.mjs 生成)
+content/roles/*.md       ─┤
+content/manifest.json    ─┴─→ zcode-collab/references/agent-*.md        (sync_from_manifest.py 生成)
+```
+
+**为什么必须这样**：v0.3.0 之前两边靠手工同步，结果插件丢了 10 条规则（"不要 git commit""有立场禁止和稀泥""说真话"等）——因为插件那份是手写搬运的，不是生成的。**任何"手工改生成物"的行为都会重演这个事故。**
+
+---
+
+## 1. 我要改规则（最常见）
+
+### 先装依赖（新克隆第一次必做）
+
+```powershell
+cd F:\AIXM\collab-mode\dsh-collab-mode
+npm install        # 装 @deepseek-ai/schemastery（lib/index.js 的运行依赖）
+```
+
+没装依赖时夹具会明确提示（`夹具无法加载 lib/index.js：缺少依赖。先装再跑：npm install`），
+不会抛裸的 MODULE_NOT_FOUND。
+
+### 改协作纪律 / 角色提示词
+
+```powershell
+cd F:\AIXM\collab-mode\dsh-collab-mode
+# 1. 改 content/ 下的文件（在仓库根，不在插件目录里）
+#    仓库根 content/ 才是源；插件目录里的 content/ 是构建时拷贝的副本
+
+# 2. 同步 DSH 侧
+node build.mjs
+node scripts/check-drift.mjs      # 必须 49/49
+
+# 3. 同步 ZCode 侧
+cd ../zcode-collab
+python scripts/sync_from_manifest.py F:\AIXM\collab-mode\dsh-collab-mode   # 先预览
+python scripts/sync_from_manifest.py F:\AIXM\collab-mode\dsh-collab-mode --write
+
+# 4. 跑夹具（72 项）
+cd ../dsh-collab-mode
+node tests/verify-plugin.mjs
+```
+
+⚠️ **生成器路径参数**：`sync_from_manifest.py` 接受的是**插件仓库根**（即含 `content/` 的目录）。合仓后仓库根有 `content/`，插件目录也有拷贝——两个都能跑，但**改完源要跑 build 再跑生成器**，否则生成器读到的是旧拷贝。
+
+### 改角色清单（增删角色、改工具权限）
+
+改 `content/manifest.json`：
+- `roles[].key` / `roles[].file` / `roles[].dsh.toolName` / `roles[].dsh.readonly` — DSH 侧用
+- `roles[].zcode.description` / `.color` / `.tools` / `.injectAgentsMd` — ZCode 侧用
+- `roles[].zcode.toolsNote` / `.nameNote` — frontmatter 里的注释（条件信息，别丢）
+
+改完跑第 1 节的四步。`check-drift.mjs` 会校验**四处角色数相等**（manifest / content/roles/*.md / 生成物 ROLES / 面板 ROLE_ROWS），少一处就报错。
+
+---
+
+## 2. 我要改插件功能（DSH 侧代码）
+
+| 文件 | 职责 | 注意 |
+|---|---|---|
+| `dsh-collab-mode/lib/index.js` | 宿主半侧：提示段、三个钩子、settings 命名空间、自检路由 | **不是生成物**，直接改 |
+| `dsh-collab-mode/lib/client.js` | 浏览器半侧：设置面板卡片 | **不是生成物**，直接改 |
+| `dsh-collab-mode/build.mjs` | 构建脚本 | 改它要同步改 `check-drift.mjs` 的断言 |
+| `lib/generated-content.js`、`cordis.patch.yml` | **生成物，禁止手改** | 手改会在下次构建被覆盖 |
+
+### 改完必须验的三件套
+
+```powershell
+cd F:\AIXM\collab-mode\dsh-collab-mode
+node build.mjs                    # 生成物
+node scripts/check-drift.mjs      # 49 项：内容一致性
+node tests/verify-plugin.mjs      # 72 项：行为（钩子/工具/面板/安全栅栏）
+```
+
+### 活体验证（改客户端或面板必做）
+
+**模块代码无法热更新**——实测三种热加载手段全失败（改 package.json 入口、复制新文件、改 loader entry id）。改完 `lib/` 下的文件**必须重启 `dsh web`**。
+
+重启后：
+1. 设置 → 插件 → 插件配置 →「协作模式」卡片应可编辑（**不是红色降级提示**）
+2. 面板改 executor 路由 → 保存 → C 区块「实际生效路由」应跟着变
+3. 委派一次 executor，用 `llm/stream` 探针抓**真实** provider/model（子智能体自报不可信，实测它回答 `provider=deepseek / model=unknown`）
+
+---
+
+## 3. 我要改 skill 功能（ZCode 侧）
+
+| 路径 | 是什么 | 注意 |
+|---|---|---|
+| `zcode-collab/SKILL.md` | 部署 6 步 + 日常答疑 + 双钢人决策 | 直接改 |
+| `zcode-collab/hooks/*.ps1` | 四个 PowerShell 钩子 | 直接改；**改完要复制到 `~/.zcode/cli/hooks/`** |
+| `zcode-collab/references/agent-*.md` | **生成物**（由 `content/` 生成） | 手改会被下次生成覆盖 |
+| `zcode-collab/references/global-agents.md` | 全局协作规则（AGENTS.md 正文） | 直接改 |
+| `zcode-collab/references/decision-full.md` | 双钢人完整版 12 段模板 | 直接改 |
+| `zcode-collab/scripts/version_check.py` | 版本自检 | 改仓库地址时**必须**同步 `REPO_URL` 与 `RAW_URL` |
+| `zcode-collab/scripts/sync_from_manifest.py` | 生成器 | 见第 1 节 |
+
+⚠️ **`~/.zcode/` 是用户配置树，不是仓库**。改仓库里的钩子后，用户本机不生效——要在 README 或部署步骤里说明"重新复制到 `~/.zcode/cli/hooks/`"。
+
+---
+
+## 4. 版本号怎么升
+
+| 位置 | 谁对齐谁 |
+|---|---|
+| `content/manifest.json` 的 `version` | **源头** |
+| `zcode-collab/VERSION` | 由 `sync_from_manifest.py` 自动同步 |
+| `dsh-collab-mode/package.json` 的 `version` | **手工改**（插件版本，与 manifest 可不同步——插件有独立的功能迭代） |
+
+**实践**：内容变更 → 升 manifest version（ZCode 侧跟涨）；纯插件功能变更 → 只升 package.json。
+
+---
+
+## 5. 发布
+
+```powershell
+cd F:\AIXM\collab-mode\zcode-collab-publish     # 这是 git 仓库
+git add -A
+git commit -m "..."
+git push origin main
+```
+
+**注意**：`F:\AIXM\collab-mode\dsh-collab-mode` 是**另一个 git 仓库**（插件独立历史，用 `git subtree` 并进主仓库的）。日常改动只需在主仓库提交——插件目录的内容已被主仓库跟踪。但如果你想在插件仓库里单独提交（保留细粒度历史），需要两边都提交，然后用 `git subtree push` 同步。
+
+**给用户的更新**：`version_check.py` 会读 GitHub raw 的 VERSION 比对，用户侧看到 `behind` 提示。所以**发布时必须让 `VERSION` 与 manifest 一致**，否则用户永远看到"有新版本"。
+
+---
+
+## 6. 已知边界与坑（都是实测踩过的）
+
+| 坑 | 说明 |
+|---|---|
+| `subagent` 工具不可被 `toolFilter` 限制 | DSH 预设把它注册进每个 agent 自己的层，而 `restrict()` 只认继承层名字。放进 deny 名单会让每次委派抛错。后果：只读角色的**孙代**不受只读约束 |
+| 模块代码不能热更新 | 改 `lib/` 必须重启 `dsh web` |
+| `tools/pre-execute` 不能改写参数 | DSH 有意为之。所以"面板改路由"必须走 `loader.update` 改角色行，不能拦截改写 |
+| `loader.update` 对补丁插入的行会回写合成树 | 会压平 bundle/profile/home 三层补丁。所以五个角色行由插件用 `ctx.loader.create()` 自己拥有（挂在 Loader root group，`write()` 是空实现） |
+| 客户端 `inject` 必须声明 `settingsScope` | 用 `ctx.get()` 一次性读取会在服务晚到时永久降级（v0.2.0 的真实缺陷） |
+| 自检路由必须走认证栅栏 | `webServer.match()` 是 exact 优先，`/api/xxx` exact 路由会**绕过** `/api` prefix 上的认证。必须调 `connection.requestRejection(req)` |
+| `~/.zcode` 配置树在钩子里豁免 | 改协作系统自身的配置不被计数（v1.1.4 起）。代价：治理工具自身改动无机器门禁 |
+| 夹具与真实运行时有差异 | 离线夹具的 `inject` 是同步回调，掩盖了真实 Cordis 的异步依赖语义。**依赖注入时机的行为，夹具验不出来，必须活体验证** |
+
+---
+
+## 7. 验收清单（改动后照做）
+
+```
+[ ] node build.mjs                       生成成功
+[ ] node scripts/check-drift.mjs         49/49
+[ ] npm install（首次）→ node tests/verify-plugin.mjs   72/72
+[ ] python zcode-collab/scripts/sync_from_manifest.py <插件根>   0 差异（或已 --write）
+[ ] 改了 lib/ → 重启 dsh web → 面板可编辑 + 路由生效
+[ ] 改了 hooks/ → 复制到 ~/.zcode/cli/hooks/
+[ ] 内容变更 → manifest.version 已升 + VERSION 已跟涨
+[ ] git commit + push（主仓库）
+```
+
+---
+
+## 8. 这个仓库的历史教训（别重蹈）
+
+1. **手工同步两份文本必丢规则**——v0.3.0 回补了插件丢失的 10 条规则。→ 所以有 `content/` 单一来源。
+2. **夹具通过 ≠ 真实可用**——v0.2.0 的 61 项断言全绿，但面板在真实浏览器里是空壳（`inject` 缺声明）。→ 所以活体验证不可省。
+3. **验证方法本身可能是错的**——曾用字符串匹配检测"规则漂移"，把"改写了措辞"全判成"丢失"（报 55 条，实际 10 条）；也曾因 JSON 转义误报 2 条规则缺失。→ 所以验证要先解析再判定，别直接 grep 转义内容。
+4. **统计方法要正确**——档位实测曾因内联的 p 值公式有 bug（恒返回 1.0000）差点得出错误结论。→ 统计脚本单独写、单独验。
