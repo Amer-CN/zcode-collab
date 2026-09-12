@@ -45,6 +45,30 @@ dsh plugin --profile web remove dsh-collab-mode
 
 A/B 的读写走**原生 client settings scope**（`ctx.settingsScope.bind`），不经过自建 HTTP bridge；`unset` 用于「留空」，因此清空字段是退回组合层默认值，而不是写一个空串进用户层。
 
+### 客户端半侧的依赖声明（v0.2.1 修复）
+
+```js
+const inject = ['slots', 'settingsScope']
+```
+
+⚠ **`settingsScope` 必须列在 `inject` 里，不能靠 `ctx.get()` 一次性读取。**
+Cordis 的 `ctx.get(name)` **不参与依赖等待**：`ServiceRegistry.notify` 只对出现在
+`fiber.inject` 里的名字重评估 fiber。服务若晚于本插件就绪，一次性读取就永远拿到
+`undefined`，卡片会**永久锁死在降级态** —— v0.2.0 的面板不可编辑（A/B 区块全灰 +
+红色降级提示）就是这个原因，v0.2.1 修掉。
+
+**代价与取舍**：硬依赖意味着 `settingsScope` 缺席时**整个客户端插件不加载**、卡片不出现，
+失去「服务未就绪」那一档的可读降级文案。这个损失经核实是空的：
+
+- `settings.plugin.item` 插槽本身由 `dsh-client-ui-settings-plugins` 的
+  `ConfigurablePluginsTab` 声明，而它的 `inject` 也含 `settingsScope` ——
+  服务缺席时插槽根本不存在，卡片本来也无处注册。
+- **命名空间级**降级（宿主未服务该 ns、memory 模式不可写）**不受影响**，仍由卡片内
+  `status !== 'ready'` 分支给出可读原因。
+
+夹具对这条有专门的回归断言（`.work/verify-plugin.mjs` 的 T13），且已验证「把
+`settingsScope` 从 `inject` 删掉时断言必须失败」。
+
 ### 角色路由怎么真正下发（机制 1：Loader 改写）
 
 面板保存 → settings 值变化 → 插件把每行角色的 `agentOptions` 热写进对应 loader entry 的
