@@ -1,0 +1,13 @@
+# 协作模式的开发工作区与临时产物（不进仓库）
+.work/
+tmp/
+backups/
+*.zip
+
+# 插件构建产物（由 dsh-collab-mode/build.mjs 从仓库根 content/ 拷贝生成）
+dsh-collab-mode/content/
+dsh-collab-mode/node_modules/
+
+# 历史交接包
+zcode-collab-handover/
+给群友的交接包/

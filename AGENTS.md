@@ -28,7 +28,7 @@ content/manifest.json    ─┴─→ zcode-collab/references/agent-*.md        
 ## 1. 我要改规则（最常见）
 
 > **本文件里的命令一律从仓库根出发、用相对路径**。仓库根 = 含 `AGENTS.md` 的那个目录
-> （本机是 `F:\AIXM\collab-mode\zcode-collab-publish`，别人机器上是他的克隆路径）。
+> （本机是 `F:\AIXM\collab-mode`，别人机器上是他的克隆路径）。
 > 这样任何机器照抄都能跑。
 
 ### 先装依赖（新克隆第一次必做）
@@ -144,12 +144,29 @@ node tests/verify-plugin.mjs      # 72 项：行为（钩子/工具/面板/安�
 
 ## 5. 目录归属（**先读这条，否则会改错地方**）
 
-**只有一个 git 仓库**：`F:\AIXM\collab-mode\zcode-collab-publish`（远端 `Amer-CN/collab-mode`）。
-它包含 `content/` + `zcode-collab/` + `dsh-collab-mode/`。**所有改动都在这里提交。**
+**项目根 = git 仓库根 = `F:\AIXM\collab-mode`**（远端 `Amer-CN/collab-mode`）。
+仓库根含 `AGENTS.md`，所有改动都在这里提交。
 
-⚠️ **`F:\AIXM\collab-mode\dsh-collab-mode` 是废弃的旧目录**（合仓前的独立仓库，**无远端**）。
-在那里改代码改动推不上去，别人也拿不到。目录里有 `已废弃-请勿在此修改.md` 说明；
-确认无用后可直接删除（权威副本与历史都在主仓库里）。
+```
+F:\AIXM\collab-mode\          ← git 仓库根（唯一）
+├── content/                  ← ★ 唯一事实源（规则 + 五角色 + manifest）
+├── zcode-collab/             ← ZCode 侧 Skill
+├── dsh-collab-mode/          ← DeepSeek Harness 侧插件（DSH 的 link 指向这里）
+├── AGENTS.md                 ← 本文件
+└── README.md                 ← 双适配安装入口
+```
+
+**只有一个插件目录**（`dsh-collab-mode/`），**只有一个 git 仓库**（项目根）。
+`dsh-collab-mode/content/` 是 `build.mjs` 从仓库根 `content/` 拷贝出来的构建产物，
+已在 `.gitignore` 里——**不要在插件目录里改 content**。
+
+⚠️ **改完插件代码要重启 `dsh web`**：DSH 的 `link:` 指向 `dsh-collab-mode`，
+它加载磁盘上的文件；但模块代码不能热更新（实测三种热加载手段全失败），
+所以改 `lib/` 后必须重启才生效。
+
+（2026-09-13 结构调整记录：此前 `zcode-collab-publish/` 是仓库根、插件被复制成两份，
+造成"改了一边另一边不生效"的分叉风险。现已把仓库根上移到项目根，插件只留一份，
+DSH 的 link 路径不变。）
 
 ## 6. 发布
 
