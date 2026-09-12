@@ -115,12 +115,24 @@ def render_one(role: dict, body: str, seat_name: str | None) -> str:
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print(f"用法: python scripts/sync_from_manifest.py <插件仓库根> [--write]", file=sys.stderr)
+        print("用法: python scripts/sync_from_manifest.py <含 content/ 的仓库根> [--write]", file=sys.stderr)
+        print(r"  例：python scripts/sync_from_manifest.py F:\AIXM\collab-mode\zcode-collab-publish", file=sys.stderr)
         return 2
-    plugin_root = Path(sys.argv[1])
+    given = Path(sys.argv[1])
     write = "--write" in sys.argv
 
-    manifest = json.loads((plugin_root / "content" / "manifest.json").read_text(encoding="utf-8"))
+    # 防呆：传插件目录（含 build.mjs）时，其 content/ 是**构建时拷贝的副本**，
+    # 可能落后于仓库根的权威 content/。若误用会静默生成过期的 skill 文件——
+    # 这里自动改用仓库根并明确告知，避免"改了源没跑 build"这类静默错误。
+    content_root = given
+    if (given / "build.mjs").exists() and (given.parent / "content" / "manifest.json").exists():
+        print(f"[提示] 传入的是插件目录，其 content/ 是构建拷贝；已自动改用仓库根：{given.parent}")
+        content_root = given.parent
+    manifest_path = content_root / "content" / "manifest.json"
+    if not manifest_path.exists():
+        print(f"[错误] 找不到 {manifest_path}", file=sys.stderr)
+        return 2
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     roles = {r["key"]: r for r in manifest["roles"]}
 
     changed: list[str] = []
@@ -144,7 +156,7 @@ def main() -> int:
     for fname, seat in targets:
         key = key_of[fname]
         role = roles[key]
-        body = (plugin_root / "content" / role["file"]).read_text(encoding="utf-8")
+        body = (content_root / "content" / role["file"]).read_text(encoding="utf-8")
         new_text = render_one(role, body, seat)
         path = SKILL_DIR / "references" / fname
         if not path.exists():

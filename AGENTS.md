@@ -27,38 +27,52 @@ content/manifest.json    ─┴─→ zcode-collab/references/agent-*.md        
 
 ## 1. 我要改规则（最常见）
 
+> **本文件里的命令一律从仓库根出发、用相对路径**。仓库根 = 含 `AGENTS.md` 的那个目录
+> （本机是 `F:\AIXM\collab-mode\zcode-collab-publish`，别人机器上是他的克隆路径）。
+> 这样任何机器照抄都能跑。
+
 ### 先装依赖（新克隆第一次必做）
 
 ```powershell
-cd F:\AIXM\collab-mode\dsh-collab-mode
+cd dsh-collab-mode
 npm install        # 装 @deepseek-ai/schemastery（lib/index.js 的运行依赖）
+cd ..
 ```
 
 没装依赖时夹具会明确提示（`夹具无法加载 lib/index.js：缺少依赖。先装再跑：npm install`），
 不会抛裸的 MODULE_NOT_FOUND。
 
-### 改协作纪律 / 角色提示词
+### 改协作纪律 / 角色提示词（四步）
 
 ```powershell
-cd F:\AIXM\collab-mode\dsh-collab-mode
-# 1. 改 content/ 下的文件（在仓库根，不在插件目录里）
-#    仓库根 content/ 才是源；插件目录里的 content/ 是构建时拷贝的副本
+# 0. 站在仓库根（含 AGENTS.md 的目录）
 
-# 2. 同步 DSH 侧
+# 1. 改 content/ 下的文件 —— 只有这里是源
+#    content/collab-rules.md   协作纪律
+#    content/roles/*.md        五个角色正文
+#    content/manifest.json     角色清单与平台差异
+
+# 2. 同步 DSH 侧（插件目录里的 content/ 是构建时拷贝的副本，这一步负责刷新它）
+cd dsh-collab-mode
 node build.mjs
 node scripts/check-drift.mjs      # 必须 49/49
+cd ..
 
-# 3. 同步 ZCode 侧
-cd ../zcode-collab
-python scripts/sync_from_manifest.py F:\AIXM\collab-mode\dsh-collab-mode   # 先预览
-python scripts/sync_from_manifest.py F:\AIXM\collab-mode\dsh-collab-mode --write
+# 3. 同步 ZCode 侧（生成 references/agent-*.md）
+cd zcode-collab
+python scripts/sync_from_manifest.py ..          # 先预览：传仓库根
+python scripts/sync_from_manifest.py .. --write  # 确认无误再写
+cd ..
 
 # 4. 跑夹具（72 项）
-cd ../dsh-collab-mode
+cd dsh-collab-mode
 node tests/verify-plugin.mjs
+cd ..
 ```
 
-⚠️ **生成器路径参数**：`sync_from_manifest.py` 接受的是**插件仓库根**（即含 `content/` 的目录）。合仓后仓库根有 `content/`，插件目录也有拷贝——两个都能跑，但**改完源要跑 build 再跑生成器**，否则生成器读到的是旧拷贝。
+⚠️ **生成器传仓库根**（`..`，即含 `content/` 的目录）。若误传插件目录，脚本会打印
+`[提示] 传入的是插件目录…已自动改用仓库根` 并纠正——但**顺序不能反**：必须先 `build.mjs`
+再跑生成器，否则读到的是插件目录里的旧拷贝（防呆只纠路径，不会替你重新构建）。
 
 ### 改角色清单（增删角色、改工具权限）
 
@@ -83,7 +97,7 @@ node tests/verify-plugin.mjs
 ### 改完必须验的三件套
 
 ```powershell
-cd F:\AIXM\collab-mode\dsh-collab-mode
+cd dsh-collab-mode                  # 从仓库根出发
 node build.mjs                    # 生成物
 node scripts/check-drift.mjs      # 49 项：内容一致性
 node tests/verify-plugin.mjs      # 72 项：行为（钩子/工具/面板/安全栅栏）
@@ -128,22 +142,33 @@ node tests/verify-plugin.mjs      # 72 项：行为（钩子/工具/面板/安�
 
 ---
 
-## 5. 发布
+## 5. 目录归属（**先读这条，否则会改错地方**）
+
+**只有一个 git 仓库**：`F:\AIXM\collab-mode\zcode-collab-publish`（远端 `Amer-CN/collab-mode`）。
+它包含 `content/` + `zcode-collab/` + `dsh-collab-mode/`。**所有改动都在这里提交。**
+
+⚠️ **`F:\AIXM\collab-mode\dsh-collab-mode` 是废弃的旧目录**（合仓前的独立仓库，**无远端**）。
+在那里改代码改动推不上去，别人也拿不到。目录里有 `已废弃-请勿在此修改.md` 说明；
+确认无用后可直接删除（权威副本与历史都在主仓库里）。
+
+## 6. 发布
 
 ```powershell
-cd F:\AIXM\collab-mode\zcode-collab-publish     # 这是 git 仓库
+# 站在仓库根（唯一 git 仓库，含 .git）
 git add -A
 git commit -m "..."
 git push origin main
 ```
 
-**注意**：`F:\AIXM\collab-mode\dsh-collab-mode` 是**另一个 git 仓库**（插件独立历史，用 `git subtree` 并进主仓库的）。日常改动只需在主仓库提交——插件目录的内容已被主仓库跟踪。但如果你想在插件仓库里单独提交（保留细粒度历史），需要两边都提交，然后用 `git subtree push` 同步。
-
 **给用户的更新**：`version_check.py` 会读 GitHub raw 的 VERSION 比对，用户侧看到 `behind` 提示。所以**发布时必须让 `VERSION` 与 manifest 一致**，否则用户永远看到"有新版本"。
+
+**改了规则内容时**，别忘了 ZCode 侧用户要重新部署才生效：钩子在 `~/.zcode/cli/hooks/`、
+子智能体在 `~/.zcode/agents/`、规则在 `~/.zcode/AGENTS.md`——这些都在用户机器上，
+仓库里的改动不会自动同步过去（用户按 README 重新走一遍部署，或手工覆盖对应文件）。
 
 ---
 
-## 6. 已知边界与坑（都是实测踩过的）
+## 7. 已知边界与坑（都是实测踩过的）
 
 | 坑 | 说明 |
 |---|---|
@@ -158,22 +183,24 @@ git push origin main
 
 ---
 
-## 7. 验收清单（改动后照做）
+## 8. 验收清单（改动后照做）
+
+站在仓库根，逐条：
 
 ```
-[ ] node build.mjs                       生成成功
-[ ] node scripts/check-drift.mjs         49/49
-[ ] npm install（首次）→ node tests/verify-plugin.mjs   72/72
-[ ] python zcode-collab/scripts/sync_from_manifest.py <插件根>   0 差异（或已 --write）
-[ ] 改了 lib/ → 重启 dsh web → 面板可编辑 + 路由生效
-[ ] 改了 hooks/ → 复制到 ~/.zcode/cli/hooks/
-[ ] 内容变更 → manifest.version 已升 + VERSION 已跟涨
-[ ] git commit + push（主仓库）
+[ ] cd dsh-collab-mode && npm install（首次） && cd ..
+[ ] cd dsh-collab-mode && node build.mjs && node scripts/check-drift.mjs    49/49
+[ ] cd dsh-collab-mode && node tests/verify-plugin.mjs                      72/72
+[ ] cd zcode-collab && python scripts/sync_from_manifest.py ..              0 差异（或已 --write）
+[ ] 改了 lib/ → 重启 dsh web → 设置→插件→插件配置 里「协作模式」可编辑 + 面板改路由后生效
+[ ] 改了 hooks/ → 复制到 ~/.zcode/cli/hooks/（本机用户才需要）
+[ ] 内容变更 → content/manifest.json 的 version 已升（VERSION 由生成器跟涨）
+[ ] git add -A && git commit && git push origin main
 ```
 
 ---
 
-## 8. 这个仓库的历史教训（别重蹈）
+## 9. 这个仓库的历史教训（别重蹈）
 
 1. **手工同步两份文本必丢规则**——v0.3.0 回补了插件丢失的 10 条规则。→ 所以有 `content/` 单一来源。
 2. **夹具通过 ≠ 真实可用**——v0.2.0 的 61 项断言全绿，但面板在真实浏览器里是空壳（`inject` 缺声明）。→ 所以活体验证不可省。
