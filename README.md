@@ -17,7 +17,7 @@ DeepSeek Harness 插件：把 ZCode 侧那套「协作模式」搬到 DSH 上。
 ## 安装
 
 ```powershell
-dsh plugin --profile web add link:F:/AIXM/dsh-collab-mode
+dsh plugin --profile web add link:F:/AIXM/collab-mode/dsh-collab-mode
 # 发布到 npm 之后：
 # dsh plugin --profile web add dsh-collab-mode
 ```
