@@ -207,12 +207,44 @@ A/B 能走原生 scope，但「工具到底注册没有 / 实际生效什么路�
 ## 单一来源与构建
 
 ```
+content/manifest.json     ── 角色清单 + 平台差异（唯一事实源）
 content/collab-rules.md   ─┐
 content/roles/*.md        ─┴─ node build.mjs ─┬─ lib/generated-content.js （提示段正文 + 五角色的 persona/deny 名单）
                                               └─ cordis.patch.yml          （只插入 collab-mode 一行）
 ```
 
-改完 `content/` 必须重新运行 `node build.mjs`（等价 `npm run build`，`prepack` 里也挂了）。两份产物都是生成物，**不要手改** —— 下一次构建会覆盖，并让 ZCode 侧的同步失去意义。
+改完 `content/` 必须依次运行：
+
+```powershell
+node build.mjs              # 重新生成两份产物（等价 npm run build）
+node scripts/check-drift.mjs # 防漂移自检（等价 npm run check）
+```
+
+两份产物都是生成物，**不要手改** —— 下一次构建会覆盖，并让 ZCode 侧的同步失去意义。
+
+### `content/` 是唯一事实源（v0.3.0 起的约定）
+
+| 文件 | 拥有什么 |
+|---|---|
+| `content/manifest.json` | 角色清单（key / file）、DSH 侧平台信息（`dsh.toolName` / `dsh.readonly`）、ZCode 侧平台信息（`zcode.description` / `color` / `tools` / `injectAgentsMd`）、内容版本号 |
+| `content/roles/*.md` | 每个角色的**正文**（persona），两平台共用 |
+| `content/collab-rules.md` | 协作纪律提示段正文 |
+| `build.mjs` 的 `MUTATING_TOOLS` | DSH 侧机制（`tools.restrict()` 的工具名白名单）—— **不属于内容**，skill 侧不需要 |
+
+**为什么要有这套约定**：v0.2.x 时角色清单写在 `build.mjs`、正文写在 `content/roles/*.md`，
+ZCode skill 侧另有一份**手写搬运**的副本。手工同步两份文本的结果是丢了 10 条实质规则，
+而且没人发现 —— 自动字符串比对也救不了，因为改写会把「丢失」伪装成「不同」。
+
+现在 ZCode skill 的 `references/agent-*.md` **由 `content/` + `manifest.json` 渲染**，
+不再手写。**改内容的唯一正确做法是改 `content/`，然后 `build.mjs` + `check-drift.mjs`。**
+
+### `scripts/check-drift.mjs` 断言什么
+
+1. `manifest.json` 可解析、字段齐备，每个 `roles[].file` 存在且非空；
+2. **四处角色数必须相等**：`manifest.roles` == `content/roles/*.md` == 生成的 `ROLES` == 面板 `ROLE_ROWS`（`lib/client.js`）；
+3. 生成物与 `content/` **同步**：重新构建后两个生成物的 SHA256 不变（即没人手工编辑过生成物）；
+4. 两个生成物文件头都带「请勿手改」告示；
+5. 每个角色的 `zcode` 块字段齐备（`description` / `color` / `tools` / `injectAgentsMd`）。
 
 ⚠ 五个角色行**不在** `cordis.patch.yml` 里（v0.2.0 起由插件用 `ctx.loader.create()` 拥有，
 原因见上文「角色路由怎么真正下发」）。因此 `dsh --profile web --dump-config` 只能看到

@@ -2,12 +2,13 @@
 /**
  * 构建脚本：把 `content/` 下的单一来源内容内联成两份产物。
  *
- *   content/collab-rules.md   -> lib/generated-content.js 的 RULES_TEXT
- *   content/roles/<角色>.md    -> lib/generated-content.js 的 ROLES[].persona
- *   （角色行的 toolFilter / 行 id / 工具名也一并生成，见 ROLES）
- *   cordis.patch.yml          -> 只插入 `collab-mode` 一行
+ *   content/manifest.json      -> 角色清单与平台差异（唯一事实源）
+ *   content/collab-rules.md    -> lib/generated-content.js 的 RULES_TEXT
+ *   content/roles/<角色>.md     -> lib/generated-content.js 的 ROLES[].persona
+ *   cordis.patch.yml           -> 只插入 `collab-mode` 一行
  *
- * 改完 `content/` 必须重新运行 `node build.mjs`（等价于 `npm run build`）。
+ * 改完 `content/` 必须重新运行 `node build.mjs`（等价于 `npm run build`），
+ * 并用 `node scripts/check-drift.mjs` 校验三处角色数一致。
  * 两份产物都是生成物，禁止手改 —— 手改会在下一次构建时被覆盖，并让 ZCode 侧的
  * 同步失去意义（任务书设计决策 3：内容单一来源）。
  *
@@ -74,24 +75,48 @@ const MUTATING_TOOLS = [
  * `backgroundMode: one-shot`：默认前台等待并直接返回结果 —— 走流程时主智能体
  * 需要拿到执行/审查结论才能裁决。
  */
-const ROLES = [
-  { key: 'executor', tool: 'executor', file: 'content/roles/executor.md', readonly: false },
-  { key: 'code-reviewer', tool: 'code-reviewer', file: 'content/roles/code-reviewer.md', readonly: true },
-  { key: 'researcher', tool: 'researcher', file: 'content/roles/researcher.md', readonly: true },
-  { key: 'advisor', tool: 'advisor', file: 'content/roles/advisor.md', readonly: true },
-  { key: 'vision-reader', tool: 'vision-reader', file: 'content/roles/vision-reader.md', readonly: true },
-]
+
+/**
+ * 读 `content/manifest.json`。
+ *
+ * ⚠ v0.3.0 起，**角色清单与平台差异都由 manifest 拥有**，本文件不再自带 ROLES 表。
+ * 原因：v0.2.x 时角色表写在这里、正文写在 `content/roles/*.md`，
+ * ZCode skill 侧另有一份手写搬运的副本 —— 手工同步两份文本导致丢过规则。
+ * 现在 `content/` 是唯一事实源，`manifest.json` 描述它，ZCode 侧从同一份渲染。
+ *
+ * `MUTATING_TOOLS` 仍留在本文件：那是 **DSH 侧机制**（`tools.restrict()` 的
+ * 工具名白名单），不属于两平台共用的内容，skill 侧不需要它。
+ */
+function readManifest() {
+  const manifest = JSON.parse(readFileSync(join(root, 'content', 'manifest.json'), 'utf8'))
+  if (typeof manifest !== 'object' || manifest === null) throw new Error('content/manifest.json must be an object')
+  if (!Array.isArray(manifest.roles) || manifest.roles.length === 0) {
+    throw new Error('content/manifest.json must declare a non-empty roles array')
+  }
+  return manifest
+}
+
+const manifest = readManifest()
 
 /* ---------- 产物一：lib/generated-content.js ---------- */
 
-const rules = readContent('content/collab-rules.md')
-const roles = ROLES.map((role) => ({
-  key: role.key,
-  tool: role.tool,
-  readonly: role.readonly,
-  persona: readContent(role.file),
-  deny: role.readonly ? MUTATING_TOOLS : null,
-}))
+const rules = readContent(join('content', manifest.rules.file))
+const roles = manifest.roles.map((role) => {
+  if (typeof role.key !== 'string' || role.key === '') throw new Error('manifest role is missing "key"')
+  if (typeof role.file !== 'string' || role.file === '') throw new Error(`manifest role "${role.key}" is missing "file"`)
+  if (typeof role.dsh !== 'object' || role.dsh === null) throw new Error(`manifest role "${role.key}" is missing "dsh"`)
+  if (typeof role.dsh.toolName !== 'string' || role.dsh.toolName === '') {
+    throw new Error(`manifest role "${role.key}" is missing "dsh.toolName"`)
+  }
+  if (typeof role.dsh.readonly !== 'boolean') throw new Error(`manifest role "${role.key}" is missing "dsh.readonly"`)
+  return {
+    key: role.key,
+    tool: role.dsh.toolName,
+    readonly: role.dsh.readonly,
+    persona: readContent(join('content', role.file)),
+    deny: role.dsh.readonly ? MUTATING_TOOLS : null,
+  }
+})
 
 const generatedJs = `// 本文件由 build.mjs 从 content/ 生成，请勿手改。
 // 重新生成：node build.mjs
